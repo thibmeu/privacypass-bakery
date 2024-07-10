@@ -123,6 +123,11 @@
             }
 
             let change = value - cost
+            // don't spend tokens if the value is too low
+            if (change < 0) {
+                change = value
+                returnedProduct = null
+            }
 
             // advantage of using log scale is we can use a greedy algorithm here for bag packing
             for (const tokenRequest of tokenRequests) {
@@ -169,7 +174,7 @@
         }
 
         const issuerOfMostValuableHolding = () => {
-            const keys = Object.keys(state.holdings).sort((a, b) => a - b)
+            const keys = Object.keys(state.holdings).sort((a, b) => a - b).reverse()
 
             for (const key of keys) {
                 if (state.holdings[key].length !== 0) {
