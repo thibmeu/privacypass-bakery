@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Boulangerie de la Vie Privée</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥐</text></svg>">
+    <link href="./index.css" rel="stylesheet" />
+    <!-- <script src="./index.js"></script> -->
+    <!-- <script src="//cdn.jsdelivr.net/npm/eruda"></script> -->
+    <!-- <script>eruda.init();</script> -->
+</head>
+
+<body>
+    <header>
+        <h1>Boulangerie de la Vie Privée</h1>
+        <p>This is a demo using Privacy Pass to a bakery from running out of French pastries. If you want to contribute,
+            check out the <a href="https://github.com/thibmeu/privacypass-bakery">source</a>.</p>
+    </header>
+    <main>
+        <section id="shop">
+            <h2>What would you like to buy</h2>
+            <p>
+                <label>Croissant</label>
+                <button onclick="buy('croissant')">$1</button>
+            </p>
+            <p>
+                <label>Pain au chocolat</label>
+                <button onclick="buy('pain-au-chocolat')">$2</button>
+            </p>
+            <p>
+                <label>Drill</label>
+                <button onclick="buy('drill')">Out of stock</button>
+            </p>
+        </section>
+        <section id="wallet">
+            <h2>Your holdings</h2>
+            <!-- Conditionally display the following. Do this only once -->
+            <p id="coupon">
+                It looks like you're short on cash. Get your first $10 on the house.
+                <button onclick="claimCoupon()">Claim $10</button>
+            </p>
+
+            <h3>
+                Total: $<span id="total">0</span>
+            </h3>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Coin</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>$10</td>
+                        <td id="holding-10">0</td>
+                    </tr>
+                    <tr>
+                        <td>$8</td>
+                        <td id="holding-8">0</td>
+                    </tr>
+                    <tr>
+                        <td>$4</td>
+                        <td id="holding-4">0</td>
+                    </tr>
+                    <tr>
+                        <td>$2</td>
+                        <td id="holding-2">0</td>
+                    </tr>
+                    <tr>
+                        <td>$1</td>
+                        <td id="holding-1">0</td>
+                    </tr>
+                </tbody>
+            </table>
+
+        </section>
+        <section id="transcript">
+            <h2>Transcripts</h2>
+            <p>Trace of everything that happened</p>
+            <code></code>
+        </section>
+    </main>
+    <footer>
+        <p>Built and developed by <a href="https://github.com/thibmeu">thibmeu</a></p>
+    </footer>
+    <script>
+        const NO_TOKEN_ISSUER = 0
+
+        const state = {
+            holdings: {
+                1: [],
+                2: [],
+                4: [],
+                8: [],
+                10: [],
+            }
+        }
+
+        const mockTokenRequests = () => {
+            return ['8', '4', '2', '1']
+        }
+
+        const mockOrigin = (product, token, tokenRequests) => {
+            let signedTokenRequests = []
+
+            const value = Number.parseInt(token)
+
+            let cost = 0
+            let returnedProduct = product
+            if (product === 'croissant') {
+                cost = 1
+            } else if (product === 'pain-au-chocolat') {
+                cost = 2
+            } else {
+                // return all tokens
+                cost = 0
+                returnedProduct = null
+            }
+
+            let change = value - cost
+
+            // advantage of using log scale is we can use a greedy algorithm here for bag packing
+            for (const tokenRequest of tokenRequests) {
+                const changeRequested = Number.parseInt(tokenRequest)
+                if (changeRequested <= change) {
+                    signedTokenRequests.push(tokenRequest)
+                    change -= changeRequested
+                } else {
+                    signedTokenRequests.push(0) // skip value
+                }
+            }
+
+            return {
+                returnedProduct,
+                signedTokenRequests
+            }
+        }
+
+        const holdingID = (holding) => `holding-${holding}`
+
+        const totalHoldings = () => {
+            let total = 0
+            for (const [value, tokens] of Object.entries(state.holdings)) {
+                total += value * tokens.length
+            }
+            return total
+        }
+
+        const refreshHoldings = () => {
+            for (const [key, tokens] of Object.entries(state.holdings)) {
+                const holding = document.querySelector(`#${holdingID(key)}`)
+                holding.innerHTML = tokens.length
+            }
+
+            const total = document.querySelector('#total')
+            total.innerHTML = `${totalHoldings()}`
+        }
+
+        const addTokenHolding = (issuer, token) => {
+            log(`Adding Token(${issuer}) to current holdings`)
+            state.holdings[issuer].push(token)
+
+            refreshHoldings()
+        }
+
+        const issuerOfMostValuableHolding = () => {
+            const keys = Object.keys(state.holdings).sort((a, b) => a - b)
+
+            for (const key of keys) {
+                if (state.holdings[key].length !== 0) {
+                    return key
+                }
+            }
+            return NO_TOKEN_ISSUER
+        }
+
+        const claimCoupon = () => {
+            log('User requested to claim $10 coupon')
+            const issuer = 10
+            log(`Contacting the issuer(${issuer}) with TokenRequest(${issuer})`)
+            log(`Retrieved Token(${issuer})`)
+            const token = '10'
+            addTokenHolding(issuer, token)
+            log('Coupon claimed')
+            const coupon = document.querySelector('#coupon')
+            coupon.classList.add('hide')
+        }
+
+        const buy = (product) => {
+            const issuer = issuerOfMostValuableHolding()
+            if (issuer === NO_TOKEN_ISSUER) {
+                log('No token to claim')
+                return
+            }
+            const tokens = state.holdings[issuer]
+
+            log(`User spends first token of issuer(${issuer})`)
+            const token = tokens[0]
+            state.holdings[issuer] = tokens.slice(1)
+
+            refreshHoldings()
+
+            let { returnedProduct, signedTokenRequests } = mockOrigin(product, token, mockTokenRequests())
+            log(`Got one ${returnedProduct}`)
+
+            // should be finalised
+            signedTokenRequests = signedTokenRequests.filter(x => x !== 0)
+            const newTokens = signedTokenRequests
+            log(`User received change [${newTokens.map(t => `Token(${t})`)}]`)
+            for (const newToken of newTokens) {
+                const value = Number.parseInt(newToken)
+                state.holdings[value].push(newToken)
+            }
+
+            refreshHoldings()
+        }
+
+        const log = (message) => {
+            const transcript = document.querySelector('section#transcript > code')
+
+            transcript.innerHTML = [`[${new Date().toISOString()}] - ${message}`, transcript.innerHTML].join('\n')
+        }
+
+        const onload = () => {
+            log('User enters the bakery')
+        }
+
+        window.addEventListener('load', onload)
+    </script>
+</body>
+
+</html>
